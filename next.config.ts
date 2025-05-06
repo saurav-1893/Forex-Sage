@@ -18,6 +18,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  env: {
+    FINAGE_API_KEY: process.env.FINAGE_API_KEY,
+  }
 };
 
 export default nextConfig;

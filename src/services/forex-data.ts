@@ -31,74 +31,64 @@ export interface ForexData {
 }
 
 /**
- * Asynchronously retrieves real-time data for a given Forex pair.
- * This implementation uses freeforexapi.com, which updates data approximately every 10 minutes
- * and does not require an API key for basic usage.
- * Bid and Ask prices are derived from the main price with a small, fixed spread as the API only provides a single rate.
+ * Asynchronously retrieves real-time data for a given Forex pair using the Finage API.
  *
  * @param pair The Forex pair to retrieve data for.
  * @returns A promise that resolves to a ForexData object containing real-time data.
  * @throws Error if the API request fails or returns invalid data.
  */
 export async function getForexData(pair: ForexPair): Promise<ForexData> {
-  const symbol = pair.symbol;
-  // Ensure the symbol is in the format required by the API (e.g., EURUSD)
-  const apiSymbol = symbol.replace('/', '');
-  const apiUrl = `https://www.freeforexapi.com/api/live?pairs=${apiSymbol}`;
+  const symbol = pair.symbol.toUpperCase(); // Finage expects uppercase symbols like EURUSD
+  const apiKey = process.env.FINAGE_API_KEY;
+
+  if (!apiKey) {
+    console.error("FINAGE_API_KEY is not set in environment variables.");
+    throw new Error("API key for Finage is not configured.");
+  }
+
+  // Using the "Last Forex Quote" endpoint from Finage: https://api.finage.co.uk/last/forex/{symbol}
+  const apiUrl = `https://api.finage.co.uk/last/forex/${symbol}?apikey=${apiKey}`;
 
   try {
     const response = await fetch(apiUrl, { cache: 'no-store' }); // Disable caching for fresh data
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error(`API request failed with status ${response.status}: ${errorBody}`);
-      throw new Error(`Failed to fetch data for ${symbol}. API returned status ${response.status}.`);
+      console.error(`Finage API request failed for ${symbol} with status ${response.status}: ${errorBody}`);
+      throw new Error(`Failed to fetch data for ${symbol}. Finage API returned status ${response.status}.`);
     }
 
     const data = await response.json();
 
-    if (data.code !== 200 || !data.rates || !data.rates[apiSymbol]) {
-      console.error('Invalid API response structure:', data);
-      throw new Error(`Invalid or incomplete data received from API for symbol ${symbol}.`);
+    // Validate the structure of the response based on Finage documentation
+    // Example: {"symbol":"EURUSD","ask":1.08389,"bid":1.08387,"asize":1000000,"bsize":2000000,"timestamp":1675328400000}
+    if (!data || typeof data.ask !== 'number' || typeof data.bid !== 'number' || typeof data.timestamp !== 'number') {
+      console.error('Invalid API response structure from Finage for symbol ' + symbol + ':', data);
+      throw new Error(`Invalid or incomplete data received from Finage API for symbol ${symbol}.`);
     }
 
-    const rateData = data.rates[apiSymbol];
-    const price = rateData.rate;
-
-    if (typeof price !== 'number' || typeof rateData.timestamp !== 'number') {
-        console.error('Invalid data types in API response:', rateData);
-        throw new Error(`Invalid data types received from API for ${symbol}.`);
-    }
-
-    // The API returns a Unix timestamp (seconds since epoch). Convert to milliseconds.
-    const timestamp = new Date(rateData.timestamp * 1000).toISOString();
-
-    // Derive mock bid and ask prices with a small spread
-    // This is a common approach when only a mid-price is available.
-    // The spread can vary significantly depending on the pair and market conditions.
-    // For a demo, a small fixed spread is used.
-    const spread = 0.0002 * price; // Example: 0.02% of the price as spread
-    const bid = parseFloat((price - spread / 2).toFixed(5));
-    const ask = parseFloat((price + spread / 2).toFixed(5));
-    const finalPrice = parseFloat(price.toFixed(5));
-
+    const ask = parseFloat(data.ask.toFixed(5));
+    const bid = parseFloat(data.bid.toFixed(5));
+    // Calculate price as the midpoint of bid and ask
+    const price = parseFloat(((ask + bid) / 2).toFixed(5));
+    
+    // Finage timestamp is in milliseconds since epoch
+    const timestamp = new Date(data.timestamp).toISOString();
 
     return {
       timestamp,
-      price: finalPrice,
+      price,
       bid,
       ask,
     };
   } catch (error) {
-    console.error(`Error fetching Forex data for ${symbol}:`, error);
-    // Fallback to some default mock data or re-throw to be handled by UI
-    // For now, re-throwing allows the UI to show a specific error toast.
-    // If we wanted to be more resilient, we could return a default mock:
-    // return {
-    //   timestamp: new Date().toISOString(),
-    //   price: 1.0, bid: 0.999, ask: 1.001, // Placeholder values
-    // };
-    throw error;
+    console.error(`Error fetching Forex data for ${symbol} from Finage:`, error);
+    // Re-throw the error to be handled by the UI, which can show a specific error toast.
+    // If the error is not an instance of Error, wrap it
+    if (error instanceof Error) {
+      throw error;
+    } else {
+      throw new Error(`An unknown error occurred while fetching data for ${symbol} from Finage.`);
+    }
   }
 }
-
