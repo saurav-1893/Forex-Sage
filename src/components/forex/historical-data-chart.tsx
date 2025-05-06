@@ -1,7 +1,16 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import * as RechartsPrimitive from "recharts"; 
+import {
+  ResponsiveContainer,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ReferenceLine,
+  CandlestickChart, // Corrected import
+} from 'recharts';
 import type { HistoricalForexDataPoint } from '@/services/forex-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,7 +29,7 @@ interface CandlestickDataPoint {
   // Recharts CandlestickChart expects an array for the candle shape
   // typically in the order [open, high, low, close] or [open, close, low, high]
   // Let's stick to [open, high, low, close] as it's common
-  ohlc: [number, number, number, number]; 
+  ohlc: [number, number, number, number];
   volume?: number; // Keep volume if available
 }
 
@@ -51,12 +60,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 
-export function HistoricalDataChart({ 
-  data, 
-  pairSymbol, 
+export function HistoricalDataChart({
+  data,
+  pairSymbol,
   isLoading,
   selectedTimeframe,
-  onTimeframeChange 
+  onTimeframeChange
 }: HistoricalDataChartProps) {
 
   const chartData: CandlestickDataPoint[] = useMemo(() => {
@@ -67,7 +76,7 @@ export function HistoricalDataChart({
       high: point.high,
       low: point.low,
       close: point.close,
-      ohlc: [point.open, point.high, point.low, point.close], 
+      ohlc: [point.open, point.high, point.low, point.close],
       volume: point.volume,
     }));
   }, [data]);
@@ -143,7 +152,7 @@ export function HistoricalDataChart({
       </Card>
     );
   }
-  
+
   const getXAxisTickFormatter = (timeframeValue: TimeframeValue) => {
     switch (timeframeValue) {
       case '1min':
@@ -196,71 +205,59 @@ export function HistoricalDataChart({
         </CardDescription>
       </CardHeader>
       <CardContent className="h-[400px] w-full pt-6">
-        <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
-          <RechartsPrimitive.CandlestickChart 
-            data={chartData} 
+        <ResponsiveContainer width="100%" height="100%">
+          <CandlestickChart
+            data={chartData}
             margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
           >
-            <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <RechartsPrimitive.XAxis 
-                dataKey="timestamp" 
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis
+                dataKey="timestamp"
                 tickFormatter={getXAxisTickFormatter(selectedTimeframe.value)}
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 10 }}
-                dy={5} 
+                dy={5}
                 domain={['dataMin', 'dataMax']}
                 scale="time"
                 type="number"
             />
-            <RechartsPrimitive.YAxis 
-                orientation="left" 
+            <YAxis
+                orientation="left"
                 domain={yDomain}
-                tickFormatter={(value) => typeof value === 'number' ? value.toFixed(5) : value} 
+                tickFormatter={(value) => typeof value === 'number' ? value.toFixed(5) : value}
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 10 }}
-                dx={-5} 
+                dx={-5}
             />
-            <RechartsPrimitive.Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
-            <RechartsPrimitive.Legend />
-            <RechartsPrimitive.Bar dataKey="ohlc" name={pairSymbol} fill="hsl(var(--chart-1))" shape={<CustomCandleShape />} />
-
-            {/* Optional: Add a reference line for the current price if available */}
-            {/* {forexData && <ReferenceLine y={forexData.price} label="Current" stroke="orange" strokeDasharray="3 3" />} */}
-          </RechartsPrimitive.CandlestickChart>
-        </RechartsPrimitive.ResponsiveContainer>
+            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
+            <Legend />
+            <ReferenceLine y={chartData.length > 0 ? chartData[chartData.length-1].close : 0} stroke="hsl(var(--chart-2))" strokeDasharray="3 3" />
+            <CandlestickSeries data={chartData} pairSymbol={pairSymbol} />
+          </CandlestickChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );
 }
 
-// CustomCandleShape is necessary if RechartsCandlestickChart doesn't have direct up/down color props
-// or if you need very specific rendering. 
-// However, usually CandlestickChart has built-in ways to color up/down candles.
-// If RechartsCandlestickChart does not have `upColor`/`downColor` props,
-// we have to use a custom shape.
-const CustomCandleShape = (props: any) => {
-  const { x, y, width, height, open, close, low, high, fill, stroke } = props;
-  // Determine color based on open/close
-  const isRising = close > open;
-  const candleColor = isRising ? 'hsl(var(--chart-2))' : 'hsl(var(--chart-1))'; // Green for up, Red for down
-
-  const candleWidth = Math.max(1, width * 0.8); // Ensure candle has some width
-  const xOffset = (width - candleWidth) / 2;
-
-
-  // Calculate body and wick positions
-  // const bodyY = isRising ? y + height * (1 - (close - low) / (high - low)) : y + height * (1 - (open - low) / (high - low));
-  const bodyHeight = Math.abs(open - close) / (high - low) * height;
-  
-  const bodyActualY = isRising ? y + (high - close) / (high - low) * height : y + (high - open) / (high - low) * height;
-
-
-  return (
-    <g stroke={stroke || candleColor} fill={candleColor} strokeWidth="1">
-      {/* Wick */}
-      <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke={candleColor} />
-      {/* Body */}
-      <rect x={x + xOffset} y={bodyActualY} width={candleWidth} height={bodyHeight > 0 ? bodyHeight : 1} fill={candleColor} />
-    </g>
-  );
-};
+function CandlestickSeries({ data, pairSymbol }: { data: CandlestickDataPoint[]; pairSymbol: string }) {
+    return data.map((entry, index) => (
+      <RechartsPrimitive.Candlestick
+        key={`candle-${pairSymbol}-${index}`}
+        dataKey="ohlc"
+        name={pairSymbol}
+        stroke="hsl(var(--chart-1))"
+        riseStroke="hsl(var(--chart-2))"
+        fallStroke="hsl(var(--chart-1))"
+        data={[{
+          timestamp: entry.timestamp,
+          open: entry.open,
+          high: entry.high,
+          low: entry.low,
+          close: entry.close,
+          ohlc: [entry.open, entry.high, entry.low, entry.close],
+          volume: entry.volume,
+        }]}
+      />
+    ));
+  }
