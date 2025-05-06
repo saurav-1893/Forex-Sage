@@ -33,7 +33,16 @@ export function ForexDashboard() {
   } = useStrategyManager();
 
   const handleFormSubmit = async ({ symbol }: { symbol: string }) => {
-    if (!selectedStrategyId && isStrategyManagerInitialized) {
+    if (!isStrategyManagerInitialized) {
+      toast({
+        variant: "destructive",
+        title: "Strategy Manager Not Ready",
+        description: "Please wait a moment for strategies to load.",
+      });
+      return;
+    }
+    
+    if (!selectedStrategyId) {
       toast({
         variant: "destructive",
         title: "No Strategy Selected",
@@ -41,6 +50,19 @@ export function ForexDashboard() {
       });
       return;
     }
+
+    const currentStrategy = getStrategyById(selectedStrategyId);
+    if (!currentStrategy) {
+        toast({
+            variant: "destructive",
+            title: "Strategy Not Found",
+            description: "The selected strategy could not be found. Please select another strategy.",
+        });
+        setIsLoadingData(false);
+        setIsLoadingAnalysis(false);
+        return;
+    }
+
 
     setIsLoadingData(true);
     setIsLoadingAnalysis(true);
@@ -74,11 +96,7 @@ export function ForexDashboard() {
 
     if (realTimeDataFetched) {
       try {
-        const currentStrategy = getStrategyById(selectedStrategyId);
-        if (!currentStrategy) {
-          throw new Error("Selected strategy not found. This should not happen.");
-        }
-
+        // currentStrategy is already fetched and validated above
         const analysisInput: AnalyzeForexPairsInput = { 
           symbol,
           strategyName: currentStrategy.name,
@@ -124,7 +142,7 @@ export function ForexDashboard() {
              <StrategyManager 
                 selectedStrategyId={selectedStrategyId}
                 onStrategyChange={setSelectedStrategyId}
-                disabled={isLoading}
+                disabled={isLoading || !isStrategyManagerInitialized}
               />
           </div>
           

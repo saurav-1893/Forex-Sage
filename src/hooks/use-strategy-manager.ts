@@ -13,54 +13,69 @@ export function useStrategyManager() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    let initialStrategies: TradingStrategy[] = [];
+    let initialSelectedId: string | null = null;
     try {
       const storedStrategies = localStorage.getItem(STRATEGIES_STORAGE_KEY);
       if (storedStrategies) {
         const parsedStrategies: TradingStrategy[] = JSON.parse(storedStrategies);
-        // Basic validation, could be enhanced with Zod parsing if needed
         if (Array.isArray(parsedStrategies) && parsedStrategies.every(s => s.id && s.name && s.rules)) {
-          setStrategies(parsedStrategies);
-          if (parsedStrategies.length > 0 && !selectedStrategyId) {
-            setSelectedStrategyId(parsedStrategies[0].id);
+          initialStrategies = parsedStrategies;
+          if (parsedStrategies.length > 0) {
+            // Check if a previously selected ID is still valid
+            const currentSelectedId = localStorage.getItem(`${STRATEGIES_STORAGE_KEY}_selected`);
+            if (currentSelectedId && parsedStrategies.find(s => s.id === currentSelectedId)) {
+              initialSelectedId = currentSelectedId;
+            } else {
+              initialSelectedId = parsedStrategies[0].id;
+            }
           }
         } else {
-          // Corrupted data, initialize with defaults
-          setStrategies(DefaultStrategies);
+          initialStrategies = DefaultStrategies;
            if (DefaultStrategies.length > 0) {
-            setSelectedStrategyId(DefaultStrategies[0].id);
+            initialSelectedId = DefaultStrategies[0].id;
           }
         }
       } else {
-        // No stored strategies, initialize with defaults
-        setStrategies(DefaultStrategies);
+        initialStrategies = DefaultStrategies;
         if (DefaultStrategies.length > 0) {
-          setSelectedStrategyId(DefaultStrategies[0].id);
+          initialSelectedId = DefaultStrategies[0].id;
         }
       }
     } catch (error) {
       console.error("Failed to load strategies from localStorage:", error);
-      setStrategies(DefaultStrategies); // Fallback to defaults on error
+      initialStrategies = DefaultStrategies; 
       if (DefaultStrategies.length > 0) {
-        setSelectedStrategyId(DefaultStrategies[0].id);
+        initialSelectedId = DefaultStrategies[0].id;
       }
     }
+    setStrategies(initialStrategies);
+    setSelectedStrategyId(initialSelectedId);
     setIsInitialized(true);
-  }, []); // selectedStrategyId removed from dependencies to avoid re-selection loop
+  }, []); 
 
   useEffect(() => {
     if (isInitialized) {
       try {
         localStorage.setItem(STRATEGIES_STORAGE_KEY, JSON.stringify(strategies));
+        if (selectedStrategyId) {
+          localStorage.setItem(`${STRATEGIES_STORAGE_KEY}_selected`, selectedStrategyId);
+        } else {
+          localStorage.removeItem(`${STRATEGIES_STORAGE_KEY}_selected`);
+        }
       } catch (error) {
         console.error("Failed to save strategies to localStorage:", error);
       }
     }
-  }, [strategies, isInitialized]);
+  }, [strategies, selectedStrategyId, isInitialized]);
 
   const addStrategy = useCallback((strategy: Omit<TradingStrategy, 'id'>) => {
     const newStrategy: TradingStrategy = { ...strategy, id: uuidv4() };
-    setStrategies(prev => [...prev, newStrategy]);
-    setSelectedStrategyId(newStrategy.id); // Optionally select the new strategy
+    setStrategies(prev => {
+      const updatedStrategies = [...prev, newStrategy];
+      return updatedStrategies;
+    });
+    setSelectedStrategyId(newStrategy.id); 
     return newStrategy;
   }, []);
 
@@ -72,7 +87,8 @@ export function useStrategyManager() {
     setStrategies(prev => {
       const newStrategies = prev.filter(s => s.id !== strategyId);
       if (selectedStrategyId === strategyId) {
-        setSelectedStrategyId(newStrategies.length > 0 ? newStrategies[0].id : null);
+        const newSelectedId = newStrategies.length > 0 ? newStrategies[0].id : null;
+        setSelectedStrategyId(newSelectedId);
       }
       return newStrategies;
     });
@@ -83,10 +99,15 @@ export function useStrategyManager() {
     return strategies.find(s => s.id === strategyId) || null;
   }, [strategies]);
 
+  const handleSetSelectedStrategyId = useCallback((id: string | null) => {
+    setSelectedStrategyId(id);
+  }, []);
+
+
   return {
     strategies,
     selectedStrategyId,
-    setSelectedStrategyId,
+    setSelectedStrategyId: handleSetSelectedStrategyId,
     addStrategy,
     updateStrategy,
     deleteStrategy,
