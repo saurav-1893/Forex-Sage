@@ -27,7 +27,7 @@ export async function analyzeForexPairs(input: AnalyzeForexPairsInput): Promise<
 const getForexPairData = ai.defineTool(
   {
     name: 'getForexPairData',
-    description: 'Retrieves real-time data for a given Forex pair.',
+    description: 'Retrieves real-time data for a given Forex pair. This tool MUST be called to get the latest market data before making a trading suggestion.',
     inputSchema: z.object({
       symbol: z.string().describe('The symbol of the Forex pair (e.g., EURUSD).'),
     }),
@@ -38,7 +38,7 @@ const getForexPairData = ai.defineTool(
       ask: z.number(),
     }),
   },
-  async (input) => {
+  async (input: {symbol: string}) => {
     const pair: ForexPair = {symbol: input.symbol};
     const data: ForexData = await getForexData(pair);
     return {
@@ -55,14 +55,12 @@ const prompt = ai.definePrompt({
   input: {schema: AnalyzeForexPairsInputSchema},
   output: {schema: AnalyzeForexPairsOutputSchema},
   tools: [getForexPairData],
-  prompt: `You are an expert Forex trading analyst. Analyze the provided Forex pair data and provide a trading suggestion.
+  prompt: `You are an expert Forex trading analyst. Your goal is to provide a trading suggestion (buy/sell), a timeframe, and a target profit in pips.
 
-  Consider backtesting data, current market conditions, and technical indicators to formulate your suggestion.
-  Include a timeframe for the suggestion and a target profit in pips.
-
-  Forex Pair: {{{symbol}}}
-
-  Use the getForexPairData tool to get the real-time data for the Forex pair before making any decision.
+  To do this, you MUST first use the 'getForexPairData' tool to fetch the current real-time market data for the given Forex pair: {{{symbol}}}.
+  
+  Once you have the real-time data from the tool, analyze it in conjunction with your knowledge of backtesting data, current market conditions, and technical indicators to formulate your suggestion.
+  Do not ask the user to provide the data; you must fetch it using the tool.
 `,
 });
 
