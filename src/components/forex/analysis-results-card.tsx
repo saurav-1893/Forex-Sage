@@ -1,8 +1,9 @@
 import type { AnalyzeForexPairsOutput } from "@/ai/flows/analyze-forex-pairs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, Target, Clock, BrainCircuit } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Clock, BrainCircuit, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 interface AnalysisResultsCardProps {
   results: AnalyzeForexPairsOutput | null;
@@ -18,12 +19,13 @@ export function AnalysisResultsCard({ results, pairSymbol, isLoading }: Analysis
           <CardTitle className="flex items-center gap-2">
              <BrainCircuit className="h-6 w-6 text-primary" /> AI Analysis: <Skeleton className="h-6 w-24" />
           </CardTitle>
-          <CardDescription>Fetching AI-powered trading suggestion...</CardDescription>
+          <CardDescription>Fetching AI-powered trading suggestion and analysis...</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Skeleton className="h-8 w-1/2" />
           <Skeleton className="h-6 w-3/4" />
           <Skeleton className="h-6 w-2/3" />
+          <Skeleton className="h-10 w-full" />
         </CardContent>
       </Card>
     );
@@ -50,10 +52,10 @@ export function AnalysisResultsCard({ results, pairSymbol, isLoading }: Analysis
   return (
     <Card className="w-full shadow-lg">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-primary">
+        <CardTitle className="flex items-center gap-2">
           <BrainCircuit className="h-6 w-6 text-primary" /> AI Analysis: {pairSymbol.toUpperCase()}
         </CardTitle>
-        <CardDescription>AI-powered trading suggestion based on backtesting and market data.</CardDescription>
+        <CardDescription>AI-powered trading suggestion based on real-time and historical data.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center gap-2">
@@ -73,6 +75,23 @@ export function AnalysisResultsCard({ results, pairSymbol, isLoading }: Analysis
           <span className="font-medium">Target Profit:</span>
           <span>{results.targetProfit} pips</span>
         </div>
+        
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="item-1">
+            <AccordionTrigger>
+              <div className="flex items-center gap-2">
+                <Info className="h-5 w-5 text-muted-foreground" />
+                <span className="font-medium">Analysis Summary</span>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {results.analysisSummary || "No summary provided."}
+              </p>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
       </CardContent>
     </Card>
   );

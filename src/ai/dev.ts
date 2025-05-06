@@ -1,5 +1,11 @@
 import { config } from 'dotenv';
-config();
+config(); // Load environment variables from .env file
 
-import '@/ai/flows/analyze-forex-pairs.ts';
-import '@/ai/flows/llm-chat-feature.ts';
+// Ensure flows are registered with Genkit
+import '@/ai/flows/analyze-forex-pairs';
+import '@/ai/flows/llm-chat-feature';
+
+// The historical data fetching logic is now integrated within 'analyze-forex-pairs.ts'
+// as a tool, so no separate import is needed for a distinct historical data flow file.
+// If getHistoricalForexData were in its own flow file (e.g., get-historical-data-flow.ts),
+// you would import it like: import '@/ai/flows/get-historical-data-flow';
