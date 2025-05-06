@@ -1,0 +1,1 @@
+recharts` library does not export a named component called `Candle`. The component to draw candlesticks is `Candlestick`. I will fix this issue.

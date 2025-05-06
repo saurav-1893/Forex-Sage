@@ -38,7 +38,7 @@ export interface ForexData {
  * Represents a single historical data point for a Forex pair (OHLCV).
  */
 export interface HistoricalForexDataPoint {
-  timestamp: string;
+  timestamp: string; // ISO string format
   open: number;
   high: number;
   low: number;
@@ -60,7 +60,7 @@ export async function getForexData(pair: ForexPair): Promise<ForexData> {
 
   if (!apiKey) {
     console.error("FINAGE_API_KEY is not set in environment variables.");
-    throw new Error("API key for Finage is not configured. Please set FINAGE_API_KEY in your .env file.");
+    throw new Error("API key for Finage is not configured. Please set FINAGE_API_KEY in your .env file. This is a required server-side environment variable.");
   }
 
   const apiUrl = `https://api.finage.co.uk/last/forex/${symbol}?apikey=${apiKey}`;
@@ -115,47 +115,49 @@ export async function getForexData(pair: ForexPair): Promise<ForexData> {
 
 /**
  * Asynchronously retrieves historical data (OHLCV candles) for a given Forex pair.
- * Fetches enough data to calculate indicators like a 14-period RSI (e.g., at least 14 + some buffer, so ~30-45 days for daily RSI).
  *
  * @param symbol The Forex pair symbol (e.g., EURUSD).
- * @param days The number of past days to fetch historical data for. Defaults to 45 to ensure enough data for typical indicators.
- * @param interval The candle interval (e.g., 'day', 'hour', 'minute'). Defaults to 'day'.
+ * @param days The number of past days to determine the `fromDate`.
+ * @param timespan The candle interval unit (e.g., 'day', 'hour', 'minute').
+ * @param multiplier The value for the candle interval (e.g., 1 for 1 day, 15 for 15 minutes).
  * @returns A promise that resolves to an array of HistoricalForexDataPoint objects, ordered oldest to newest.
  * @throws Error if the API request fails or returns invalid data.
  */
 export async function getHistoricalForexData(
   symbol: string,
-  days: number = 45, // Increased default to ensure enough data for RSI(14)
-  interval: 'day' | 'hour' | 'minute' = 'day'
+  days: number,
+  timespan: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year',
+  multiplier: number
 ): Promise<HistoricalForexDataPoint[]> {
   const upperSymbol = symbol.toUpperCase();
   const apiKey = process.env.FINAGE_API_KEY;
 
   if (!apiKey) {
     console.error("FINAGE_API_KEY is not set in environment variables.");
-    throw new Error("API key for Finage is not configured. Please set FINAGE_API_KEY in your .env file.");
+    throw new Error("API key for Finage is not configured. Please set FINAGE_API_KEY in your .env file. This is a required server-side environment variable.");
   }
 
   const toDate = new Date();
-  const fromDate = subDays(toDate, days);
+  const fromDate = subDays(toDate, days); // Calculate fromDate based on 'days' lookback
 
   const toDateString = format(toDate, 'yyyy-MM-dd');
   const fromDateString = format(fromDate, 'yyyy-MM-dd');
   
-  const multiplier = 1; 
-
-  const apiUrl = `https://api.finage.co.uk/agg/forex/${upperSymbol}/${multiplier}/${interval}/${fromDateString}/${toDateString}?apikey=${apiKey}&limit=500`; // Added limit just in case days is very large for other intervals
+  // Finage uses 'timespan' for interval unit and 'multiplier' for its value.
+  // Example: 1 Day candle = multiplier: 1, timespan: 'day'
+  // Example: 15 Minute candle = multiplier: 15, timespan: 'minute'
+  const apiUrl = `https://api.finage.co.uk/agg/forex/${upperSymbol}/${multiplier}/${timespan}/${fromDateString}/${toDateString}?apikey=${apiKey}&limit=5000`; // Increased limit for more data points
 
   try {
     const response = await fetch(apiUrl, { cache: 'no-store' });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      console.error(`Finage API request failed for historical data of ${upperSymbol} with status ${response.status}: ${errorBody}`);
+      console.error(`Finage API request failed for historical data of ${upperSymbol} (multiplier: ${multiplier}, timespan: ${timespan}) with status ${response.status}: ${errorBody}`);
       let errorMessage = `Failed to fetch historical data for ${upperSymbol}. Finage API returned status ${response.status}.`;
       if (response.status === 401) errorMessage += " Invalid API key.";
       else if (response.status === 429) errorMessage += " API rate limit exceeded.";
-      else if (response.status === 400 && errorBody.includes("not supported")) errorMessage += ` Symbol ${upperSymbol} or interval ${interval} may not be supported.`;
+      else if (response.status === 400 && errorBody.includes("not supported")) errorMessage += ` Symbol ${upperSymbol}, multiplier ${multiplier}, or timespan ${timespan} may not be supported.`;
       else errorMessage += ` Details: ${errorBody}`;
       throw new Error(errorMessage);
     }
@@ -177,13 +179,13 @@ export async function getHistoricalForexData(
         typeof point.l !== 'number' ||
         typeof point.c !== 'number' ||
         typeof point.v !== 'number' ||
-        typeof point.t !== 'number'
+        typeof point.t !== 'number' // Finage timestamp is in milliseconds
       ) {
         console.warn('Skipping invalid historical data point for ' + upperSymbol + ':', point);
         return null;
       }
       return {
-        timestamp: new Date(point.t).toISOString(),
+        timestamp: new Date(point.t).toISOString(), // Convert ms to ISO string
         open: parseFloat(point.o.toFixed(5)),
         high: parseFloat(point.h.toFixed(5)),
         low: parseFloat(point.l.toFixed(5)),
@@ -192,7 +194,7 @@ export async function getHistoricalForexData(
       };
     }).filter((point: HistoricalForexDataPoint | null): point is HistoricalForexDataPoint => point !== null);
 
-    // Ensure data is sorted from oldest to newest for RSI calculation
+    // Ensure data is sorted from oldest to newest
     return historicalPoints.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   } catch (error) {
@@ -259,4 +261,25 @@ export async function calculateRSI(closingPrices: number[], period: number = 14)
   const rsi = 100 - (100 / (1 + rs));
 
   return parseFloat(rsi.toFixed(2));
+}
+
+
+/**
+ * Calculates Simple Moving Average (SMA) for a given period from historical closing prices.
+ * @param closingPrices An array of closing prices, ordered from oldest to newest.
+ * @param period The period for SMA calculation (e.g., 10, 30).
+ * @returns An array of SMA values, with the latest SMA at the end. Returns empty array if not enough data.
+ */
+export async function calculateSMA(closingPrices: number[], period: number): Promise<number[]> {
+  if (closingPrices.length < period) {
+    console.warn(`Not enough data (${closingPrices.length} points) to calculate SMA for period ${period}. Need at least ${period} points.`);
+    return [];
+  }
+
+  const smaValues: number[] = [];
+  for (let i = period - 1; i < closingPrices.length; i++) {
+    const sum = closingPrices.slice(i - period + 1, i + 1).reduce((acc, val) => acc + val, 0);
+    smaValues.push(parseFloat((sum / period).toFixed(5)));
+  }
+  return smaValues;
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { ForexData, ForexPair } from "@/services/forex-data";
-import { getForexData } from "@/services/forex-data";
+import type { ForexData, ForexPair, HistoricalForexDataPoint } from "@/services/forex-data";
+import { getForexData, getHistoricalForexData } from "@/services/forex-data";
 import type { AnalyzeForexPairsInput, AnalyzeForexPairsOutput } from "@/ai/flows/analyze-forex-pairs";
 import { analyzeForexPairs } from "@/ai/flows/analyze-forex-pairs";
 import { useToast } from "@/hooks/use-toast";
@@ -14,13 +14,15 @@ import { AnalysisResultsCard } from "./analysis-results-card";
 import { StrategyManager } from "./strategy-manager";
 import { Separator } from "@/components/ui/separator";
 import Image from "next/image";
-// import { HistoricalDataChart } from "./historical-data-chart";
-// import type { HistoricalForexDataPoint } from "@/services/forex-data"; 
+import { HistoricalDataChart, type TimeframeOption } from "./historical-data-chart"; 
+import { DEFAULT_TIMEFRAME, TIMEFRAME_CONFIG } from "@/config/forex";
+
 
 export function ForexDashboard() {
   const [selectedPairSymbol, setSelectedPairSymbol] = useState<string | null>(null);
   const [forexData, setForexData] = useState<ForexData | null>(null);
-  // const [historicalData, setHistoricalData] = useState<HistoricalForexDataPoint[] | null>(null);
+  const [historicalData, setHistoricalData] = useState<HistoricalForexDataPoint[] | null>(null);
+  const [selectedTimeframe, setSelectedTimeframe] = useState<TimeframeOption>(DEFAULT_TIMEFRAME);
   const [analysisResults, setAnalysisResults] = useState<AnalyzeForexPairsOutput | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false);
@@ -58,17 +60,14 @@ export function ForexDashboard() {
             title: "Strategy Not Found",
             description: "The selected strategy could not be found. Please select another strategy.",
         });
-        setIsLoadingData(false);
-        setIsLoadingAnalysis(false);
         return;
     }
-
 
     setIsLoadingData(true);
     setIsLoadingAnalysis(true);
     setSelectedPairSymbol(symbol);
     setForexData(null);
-    // setHistoricalData(null);
+    setHistoricalData(null);
     setAnalysisResults(null);
 
     let realTimeDataFetched = false;
@@ -77,8 +76,8 @@ export function ForexDashboard() {
       const pair: ForexPair = { symbol };
       const data = await getForexData(pair);
       setForexData(data);
+      realTimeDataFetched = true; // Mark as fetched to proceed to historical/analysis
       toast({ title: "Real-time Data Fetched", description: `Data for ${symbol} loaded successfully.` });
-      realTimeDataFetched = true;
     } catch (error) {
       console.error("Error fetching Forex data:", error);
       const errorMessage = error instanceof Error ? error.message : "Could not load real-time data.";
@@ -89,14 +88,31 @@ export function ForexDashboard() {
       });
       setIsLoadingData(false);
       setIsLoadingAnalysis(false); 
-      return;
-    } finally {
-      setIsLoadingData(false);
+      return; // Stop if real-time fails
     }
 
-    if (realTimeDataFetched) {
+    // Fetch historical data regardless of real-time data outcome for chart, but after real-time attempt
+    try {
+        const config = TIMEFRAME_CONFIG[selectedTimeframe.value];
+        const histData = await getHistoricalForexData(symbol, config.days, config.timespan, config.multiplier);
+        setHistoricalData(histData);
+        toast({ title: "Historical Data Fetched", description: `Historical data for ${symbol} (${selectedTimeframe.label}) loaded.` });
+    } catch (error) {
+        console.error("Error fetching historical Forex data:", error);
+        const errorMessage = error instanceof Error ? error.message : "Could not load historical data.";
+        toast({
+            variant: "destructive",
+            title: "Error Fetching Historical Data",
+            description: `${errorMessage}`,
+        });
+        // Don't necessarily stop analysis if historical fails, but log it. AI flow might handle missing historical.
+    } finally {
+       setIsLoadingData(false); // Finished loading data (real-time and historical attempts)
+    }
+
+
+    if (realTimeDataFetched) { // Only proceed to AI analysis if real-time data was fetched
       try {
-        // currentStrategy is already fetched and validated above
         const analysisInput: AnalyzeForexPairsInput = { 
           symbol,
           strategyName: currentStrategy.name,
@@ -122,9 +138,35 @@ export function ForexDashboard() {
         setIsLoadingAnalysis(false);
       }
     } else {
+      // If real-time data failed, we already returned, but as a safeguard:
       setIsLoadingAnalysis(false);
     }
   };
+  
+  const handleTimeframeChange = async (newTimeframe: TimeframeOption) => {
+    setSelectedTimeframe(newTimeframe);
+    if (selectedPairSymbol) {
+      setIsLoadingData(true);
+      setHistoricalData(null);
+      try {
+        const config = TIMEFRAME_CONFIG[newTimeframe.value];
+        const histData = await getHistoricalForexData(selectedPairSymbol, config.days, config.timespan, config.multiplier);
+        setHistoricalData(histData);
+        toast({ title: "Historical Data Updated", description: `Historical data for ${selectedPairSymbol} (${newTimeframe.label}) loaded.` });
+      } catch (error) {
+        console.error("Error fetching historical Forex data on timeframe change:", error);
+        const errorMessage = error instanceof Error ? error.message : "Could not load historical data for new timeframe.";
+        toast({
+            variant: "destructive",
+            title: "Error Fetching Historical Data",
+            description: `${errorMessage}`,
+        });
+      } finally {
+        setIsLoadingData(false);
+      }
+    }
+  };
+
 
   const isLoading = isLoadingData || isLoadingAnalysis;
 
@@ -163,11 +205,16 @@ export function ForexDashboard() {
         </div>
 
         <div className="md:col-span-2 space-y-8">
-          <ForexDataCard data={forexData} pairSymbol={selectedPairSymbol} isLoading={isLoadingData} />
+          <ForexDataCard data={forexData} pairSymbol={selectedPairSymbol} isLoading={isLoadingData && !historicalData} />
           <Separator />
-          {/* Placeholder for HistoricalDataChart - needs data from somewhere */}
-          {/* <HistoricalDataChart data={historicalData} pairSymbol={selectedPairSymbol} isLoading={isLoadingData} /> */}
-          {/* <Separator /> */}
+          <HistoricalDataChart 
+            data={historicalData} 
+            pairSymbol={selectedPairSymbol} 
+            isLoading={isLoadingData}
+            selectedTimeframe={selectedTimeframe}
+            onTimeframeChange={handleTimeframeChange}
+          />
+          <Separator />
           <AnalysisResultsCard results={analysisResults} pairSymbol={selectedPairSymbol} isLoading={isLoadingAnalysis} />
         </div>
       </div>
