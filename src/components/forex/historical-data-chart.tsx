@@ -1,17 +1,7 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import {
-  ResponsiveContainer,
-  CandlestickChart as RechartsCandlestickChart, // Alias to avoid naming conflict
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Legend,
-  Candle, // Changed back from Candlestick to Candle
-  ReferenceLine,
-} from 'recharts';
+import * as RechartsPrimitive from "recharts"; 
 import type { HistoricalForexDataPoint } from '@/services/forex-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,8 +17,11 @@ interface CandlestickDataPoint {
   high: number;
   low: number;
   close: number;
-  // Optional: ohlc array for Candlestick/Candle component
-  ohlc?: [number, number, number, number]; 
+  // Recharts CandlestickChart expects an array for the candle shape
+  // typically in the order [open, high, low, close] or [open, close, low, high]
+  // Let's stick to [open, high, low, close] as it's common
+  ohlc: [number, number, number, number]; 
+  volume?: number; // Keep volume if available
 }
 
 interface HistoricalDataChartProps {
@@ -74,8 +67,8 @@ export function HistoricalDataChart({
       high: point.high,
       low: point.low,
       close: point.close,
-      // Recharts Candle/Candlestick expects ohlc as an array for the candle shape
       ohlc: [point.open, point.high, point.low, point.close], 
+      volume: point.volume,
     }));
   }, [data]);
 
@@ -151,7 +144,6 @@ export function HistoricalDataChart({
     );
   }
   
-  // Determine X-axis tick formatter based on timeframe
   const getXAxisTickFormatter = (timeframeValue: TimeframeValue) => {
     switch (timeframeValue) {
       case '1min':
@@ -203,46 +195,72 @@ export function HistoricalDataChart({
           Displaying candlestick chart for {pairSymbol.toUpperCase()} ({selectedTimeframe.label} timeframe).
         </CardDescription>
       </CardHeader>
-      <CardContent className="h-[400px] w-full pt-6"> {/* Increased height and ensured width */}
-        <ResponsiveContainer width="100%" height="100%">
-          <RechartsCandlestickChart data={chartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis 
+      <CardContent className="h-[400px] w-full pt-6">
+        <RechartsPrimitive.ResponsiveContainer width="100%" height="100%">
+          <RechartsPrimitive.CandlestickChart 
+            data={chartData} 
+            margin={{ top: 5, right: 20, left: -20, bottom: 5 }}
+          >
+            <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <RechartsPrimitive.XAxis 
                 dataKey="timestamp" 
                 tickFormatter={getXAxisTickFormatter(selectedTimeframe.value)}
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 10 }}
-                dy={5} // Adjust tick position
+                dy={5} 
                 domain={['dataMin', 'dataMax']}
                 scale="time"
                 type="number"
             />
-            <YAxis 
+            <RechartsPrimitive.YAxis 
                 orientation="left" 
                 domain={yDomain}
-                tickFormatter={(value) => value.toFixed(5)} 
+                tickFormatter={(value) => typeof value === 'number' ? value.toFixed(5) : value} 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fontSize: 10 }}
-                dx={-5} // Adjust tick position
+                dx={-5} 
             />
-            <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
-            <Candle // Changed back from Candlestick
-                dataKey="ohlc" 
-                name={pairSymbol}
-                stroke="transparent" 
-                fill="hsl(var(--card))" 
-                isAnimationActive={false}
-                upColor="hsl(var(--chart-2))" // Green for up candles
-                downColor="hsl(var(--chart-1))" // Red for down candles
-                // The shape prop is not standard for Recharts Candle/Candlestick. 
-                // Color is handled by upColor/downColor and fill.
-                // Wick/Body rendering is internal to the Candle component.
-            />
+            <RechartsPrimitive.Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
+            <RechartsPrimitive.Legend />
+            <RechartsPrimitive.Bar dataKey="ohlc" name={pairSymbol} fill="hsl(var(--chart-1))" shape={<CustomCandleShape />} />
+
             {/* Optional: Add a reference line for the current price if available */}
             {/* {forexData && <ReferenceLine y={forexData.price} label="Current" stroke="orange" strokeDasharray="3 3" />} */}
-          </RechartsCandlestickChart>
-        </ResponsiveContainer>
+          </RechartsPrimitive.CandlestickChart>
+        </RechartsPrimitive.ResponsiveContainer>
       </CardContent>
     </Card>
   );
 }
+
+// CustomCandleShape is necessary if RechartsCandlestickChart doesn't have direct up/down color props
+// or if you need very specific rendering. 
+// However, usually CandlestickChart has built-in ways to color up/down candles.
+// If RechartsCandlestickChart does not have `upColor`/`downColor` props,
+// we have to use a custom shape.
+const CustomCandleShape = (props: any) => {
+  const { x, y, width, height, open, close, low, high, fill, stroke } = props;
+  // Determine color based on open/close
+  const isRising = close > open;
+  const candleColor = isRising ? 'hsl(var(--chart-2))' : 'hsl(var(--chart-1))'; // Green for up, Red for down
+
+  const candleWidth = Math.max(1, width * 0.8); // Ensure candle has some width
+  const xOffset = (width - candleWidth) / 2;
+
+
+  // Calculate body and wick positions
+  // const bodyY = isRising ? y + height * (1 - (close - low) / (high - low)) : y + height * (1 - (open - low) / (high - low));
+  const bodyHeight = Math.abs(open - close) / (high - low) * height;
+  
+  const bodyActualY = isRising ? y + (high - close) / (high - low) * height : y + (high - open) / (high - low) * height;
+
+
+  return (
+    <g stroke={stroke || candleColor} fill={candleColor} strokeWidth="1">
+      {/* Wick */}
+      <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke={candleColor} />
+      {/* Body */}
+      <rect x={x + xOffset} y={bodyActualY} width={candleWidth} height={bodyHeight > 0 ? bodyHeight : 1} fill={candleColor} />
+    </g>
+  );
+};
