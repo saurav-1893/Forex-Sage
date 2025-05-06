@@ -12,8 +12,8 @@ import {
   CandlestickChart, // Corrected import
 } from 'recharts';
 import type { HistoricalForexDataPoint } from '@/services/forex-data';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { TimeframeOption, TimeframeValue } from '@/config/forex';
@@ -232,32 +232,14 @@ export function HistoricalDataChart({
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
             <Legend />
             <ReferenceLine y={chartData.length > 0 ? chartData[chartData.length-1].close : 0} stroke="hsl(var(--chart-2))" strokeDasharray="3 3" />
-            <CandlestickSeries data={chartData} pairSymbol={pairSymbol} />
+            <RechartsPrimitive.Candlestick dataKey="ohlc"
+              name={pairSymbol}
+              stroke="hsl(var(--chart-1))"
+              riseStroke="hsl(var(--chart-2))"
+              fallStroke="hsl(var(--chart-1))"/>
           </CandlestickChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>
   );
 }
-
-function CandlestickSeries({ data, pairSymbol }: { data: CandlestickDataPoint[]; pairSymbol: string }) {
-    return data.map((entry, index) => (
-      <RechartsPrimitive.Candlestick
-        key={`candle-${pairSymbol}-${index}`}
-        dataKey="ohlc"
-        name={pairSymbol}
-        stroke="hsl(var(--chart-1))"
-        riseStroke="hsl(var(--chart-2))"
-        fallStroke="hsl(var(--chart-1))"
-        data={[{
-          timestamp: entry.timestamp,
-          open: entry.open,
-          high: entry.high,
-          low: entry.low,
-          close: entry.close,
-          ohlc: [entry.open, entry.high, entry.low, entry.close],
-          volume: entry.volume,
-        }]}
-      />
-    ));
-  }
