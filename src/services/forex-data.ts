@@ -70,7 +70,8 @@ export async function getForexData(pair: ForexPair): Promise<ForexData> {
         throw new Error(`Invalid data types received from API for ${symbol}.`);
     }
 
-    const timestamp = new Date(rateData.timestamp).toISOString();
+    // The API returns a Unix timestamp (seconds since epoch). Convert to milliseconds.
+    const timestamp = new Date(rateData.timestamp * 1000).toISOString();
 
     // Derive mock bid and ask prices with a small spread
     // This is a common approach when only a mid-price is available.
