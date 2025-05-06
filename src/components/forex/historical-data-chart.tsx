@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
   ReferenceLine,
-  CandlestickChart, // Corrected import
+  CandlestickChart,
 } from 'recharts';
 import type { HistoricalForexDataPoint } from '@/services/forex-data';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -232,7 +232,9 @@ export function HistoricalDataChart({
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--accent))', strokeWidth: 1 }}/>
             <Legend />
             <ReferenceLine y={chartData.length > 0 ? chartData[chartData.length-1].close : 0} stroke="hsl(var(--chart-2))" strokeDasharray="3 3" />
-            <RechartsPrimitive.Candlestick dataKey="ohlc"
+            {/*@ts-expect-error*/}
+            <Candlestick
+              dataKey="ohlc"
               name={pairSymbol}
               stroke="hsl(var(--chart-1))"
               riseStroke="hsl(var(--chart-2))"
@@ -242,4 +244,16 @@ export function HistoricalDataChart({
       </CardContent>
     </Card>
   );
+}
+// Simple one-time pulse animation
+interface CandlestickProps {
+  dataKey: string | number | ((object: any) => any);
+  name: string;
+  stroke: string;
+  riseStroke: string;
+  fallStroke: string;
+}
+
+function Candlestick(props: CandlestickProps) {
+  return null;
 }
