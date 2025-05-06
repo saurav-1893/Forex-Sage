@@ -1,4 +1,3 @@
-
 'use server';
 
 import { format, subDays } from 'date-fns';
@@ -115,17 +114,18 @@ export async function getForexData(pair: ForexPair): Promise<ForexData> {
 
 
 /**
- * Asynchronously retrieves historical data (OHLCV candles) for a given Forex pair for the last 30 days.
+ * Asynchronously retrieves historical data (OHLCV candles) for a given Forex pair.
+ * Fetches enough data to calculate indicators like a 14-period RSI (e.g., at least 14 + some buffer, so ~30-45 days for daily RSI).
  *
  * @param symbol The Forex pair symbol (e.g., EURUSD).
- * @param days The number of past days to fetch historical data for. Defaults to 30.
+ * @param days The number of past days to fetch historical data for. Defaults to 45 to ensure enough data for typical indicators.
  * @param interval The candle interval (e.g., 'day', 'hour', 'minute'). Defaults to 'day'.
- * @returns A promise that resolves to an array of HistoricalForexDataPoint objects.
+ * @returns A promise that resolves to an array of HistoricalForexDataPoint objects, ordered oldest to newest.
  * @throws Error if the API request fails or returns invalid data.
  */
 export async function getHistoricalForexData(
   symbol: string,
-  days: number = 30,
+  days: number = 45, // Increased default to ensure enough data for RSI(14)
   interval: 'day' | 'hour' | 'minute' = 'day'
 ): Promise<HistoricalForexDataPoint[]> {
   const upperSymbol = symbol.toUpperCase();
@@ -142,12 +142,9 @@ export async function getHistoricalForexData(
   const toDateString = format(toDate, 'yyyy-MM-dd');
   const fromDateString = format(fromDate, 'yyyy-MM-dd');
   
-  // Determine multiplier based on interval for Finage API
-  // For 'day', multiplier is 1. For 'hour', it's 1. For 'minute', it's 1.
-  // Finage API: /agg/forex/{SYMBOL}/{MULTIPLIER}/{TIMESPACE}/{FROM}/{TO}
   const multiplier = 1; 
 
-  const apiUrl = `https://api.finage.co.uk/agg/forex/${upperSymbol}/${multiplier}/${interval}/${fromDateString}/${toDateString}?apikey=${apiKey}`;
+  const apiUrl = `https://api.finage.co.uk/agg/forex/${upperSymbol}/${multiplier}/${interval}/${fromDateString}/${toDateString}?apikey=${apiKey}&limit=500`; // Added limit just in case days is very large for other intervals
 
   try {
     const response = await fetch(apiUrl, { cache: 'no-store' });
@@ -173,10 +170,7 @@ export async function getHistoricalForexData(
       throw new Error(`Invalid or incomplete historical data received from Finage API for symbol ${upperSymbol}. Expected 'results' to be an array.`);
     }
     
-    // Finage historical data structure:
-    // "results": [ { "o": 1.072, "h": 1.07208, "l": 1.07182, "c": 1.07193, "v": 32, "t": 1705606200000 }, ... ]
-    // o: open, h: high, l: low, c: close, v: volume, t: timestamp (milliseconds)
-    return data.results.map((point: any) => {
+    const historicalPoints = data.results.map((point: any) => {
       if (
         typeof point.o !== 'number' ||
         typeof point.h !== 'number' ||
@@ -186,7 +180,7 @@ export async function getHistoricalForexData(
         typeof point.t !== 'number'
       ) {
         console.warn('Skipping invalid historical data point for ' + upperSymbol + ':', point);
-        return null; // Skip invalid points
+        return null;
       }
       return {
         timestamp: new Date(point.t).toISOString(),
@@ -198,6 +192,9 @@ export async function getHistoricalForexData(
       };
     }).filter((point: HistoricalForexDataPoint | null): point is HistoricalForexDataPoint => point !== null);
 
+    // Ensure data is sorted from oldest to newest for RSI calculation
+    return historicalPoints.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
   } catch (error) {
     console.error(`Error fetching historical Forex data for ${upperSymbol} from Finage:`, error);
     if (error instanceof Error) {
@@ -206,4 +203,60 @@ export async function getHistoricalForexData(
       throw new Error(`An unknown error occurred while fetching historical data for ${upperSymbol} from Finage.`);
     }
   }
+}
+
+
+/**
+ * Calculates the Relative Strength Index (RSI) for a given period from historical closing prices.
+ * @param closingPrices An array of closing prices, ordered from oldest to newest.
+ * @param period The period for RSI calculation (e.g., 14).
+ * @returns The latest RSI value, or null if not enough data.
+ */
+export async function calculateRSI(closingPrices: number[], period: number = 14): Promise<number | null> {
+  if (closingPrices.length < period + 1) {
+    // Not enough data to calculate RSI reliably (need at least `period` changes)
+    console.warn(`Not enough data (${closingPrices.length} points) to calculate RSI for period ${period}. Need at least ${period + 1} points.`);
+    return null;
+  }
+
+  let gains = 0;
+  let losses = 0;
+
+  // Calculate initial average gain and loss for the first `period` changes
+  for (let i = 1; i <= period; i++) {
+    const change = closingPrices[i] - closingPrices[i - 1];
+    if (change > 0) {
+      gains += change;
+    } else {
+      losses -= change; // losses are positive values
+    }
+  }
+
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
+
+  // Smooth RSI for subsequent periods
+  for (let i = period + 1; i < closingPrices.length; i++) {
+    const change = closingPrices[i] - closingPrices[i - 1];
+    let currentGain = 0;
+    let currentLoss = 0;
+
+    if (change > 0) {
+      currentGain = change;
+    } else {
+      currentLoss = -change;
+    }
+
+    avgGain = (avgGain * (period - 1) + currentGain) / period;
+    avgLoss = (avgLoss * (period - 1) + currentLoss) / period;
+  }
+
+  if (avgLoss === 0) {
+    return 100; // RSI is 100 if average loss is zero (all gains)
+  }
+
+  const rs = avgGain / avgLoss;
+  const rsi = 100 - (100 / (1 + rs));
+
+  return parseFloat(rsi.toFixed(2));
 }
