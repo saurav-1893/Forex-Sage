@@ -1,16 +1,39 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { llmChat, type LlmChatInput, type LlmChatOutput } from '@/ai/flows/llm-chat-feature';
 import type { Message } from '@/components/chat/message-list';
 import { LLM_MODELS, type LlmModelValue } from '@/config/forex';
 import { useToast } from '@/hooks/use-toast';
+
+const CHAT_MESSAGES_STORAGE_KEY = 'forexSageChatMessages';
 
 export function useLlmChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedModel, setSelectedModel] = useState<LlmModelValue>(LLM_MODELS[0].value);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const storedMessages = localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+      if (storedMessages) {
+        setMessages(JSON.parse(storedMessages));
+      }
+    } catch (error) {
+      console.error("Failed to load messages from localStorage:", error);
+      // Optionally, clear corrupted storage
+      // localStorage.removeItem(CHAT_MESSAGES_STORAGE_KEY);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(messages));
+    } catch (error) {
+      console.error("Failed to save messages to localStorage:", error);
+    }
+  }, [messages]);
 
   const addMessage = (text: string, sender: 'user' | 'bot', model?: string) => {
     setMessages((prevMessages) => [
@@ -27,7 +50,7 @@ export function useLlmChat() {
 
     try {
       const input: LlmChatInput = {
-        modelName: selectedModel, // This is illustrative; the actual flow might use a specific model or this parameter
+        modelName: selectedModel,
         message: userMessage,
       };
       const output: LlmChatOutput = await llmChat(input);
