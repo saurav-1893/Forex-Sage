@@ -1,0 +1,59 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Verify your model definitions
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  // Other fields
+}
+
+model TestTable {
+  id        Int       @id @default(autoincrement())
+  name      String    @db.VarChar(100)
+  createdAt DateTime  @default(now())
+}
+
+model ForexData {
+  id        String   @id @default(cuid())
+  symbol    String
+  price     Float
+  timestamp DateTime @default(now())
+  
+  @@index([symbol, timestamp])
+}
+
+model ForexCandle {
+  id          String   @id @default(cuid())
+  instrument  String
+  granularity String
+  timestamp   DateTime
+  open        Float
+  high        Float
+  low         Float
+  close       Float
+  volume      Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([instrument, granularity, timestamp])
+  @@map("ForexCandle")
+}
+
+model LivePrice {
+  id          String   @id @default(cuid())
+  instrument  String
+  bid         Float
+  ask         Float
+  timestamp   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("LivePrice")
+}
