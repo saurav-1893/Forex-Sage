@@ -1,16 +1,23 @@
-# Dependencies 
-node_modules/ 
-# Next.js 
-.next/ 
-out/ 
-# Environment 
-.env* 
-# Executables 
-*.exe 
-# Large files 
-*.zip 
-*.tar.gz 
-# Genkit 
-.genkit/ 
-# TypeScript 
-next-env.d.ts 
+echo # Forex Sage > README.md
+echo. >> README.md
+echo A modern, real-time forex trading dashboard built with Next.js 15. >> README.md
+echo. >> README.md
+echo ## Features >> README.md
+echo - Real-time forex data streaming with OANDA API >> README.md
+echo - Interactive trading charts and analytics >> README.md
+echo - AI-powered market analysis using Google Genkit >> README.md
+echo - Responsive dashboard with live data panels >> README.md
+echo - Multiple currency pair support >> README.md
+echo. >> README.md
+echo ## Tech Stack >> README.md
+echo - Next.js 15 with TypeScript >> README.md
+echo - Tailwind CSS for styling >> README.md
+echo - OANDA API for forex data >> README.md
+echo - Google Genkit for AI features >> README.md
+echo - Prisma ORM for database >> README.md
+echo. >> README.md
+echo ## Setup >> README.md
+echo 1. Clone the repository >> README.md
+echo 2. Install dependencies: `npm install` >> README.md
+echo 3. Copy `.env.example` to `.env.local` and add your API keys >> README.md
+echo 4. Run development server: `npm run dev` >> README.md
