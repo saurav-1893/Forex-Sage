@@ -10,3 +10,7 @@ out/
 # Large files 
 *.zip 
 *.tar.gz 
+# Genkit 
+.genkit/ 
+# TypeScript 
+next-env.d.ts 
